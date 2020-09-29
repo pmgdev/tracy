@@ -72,21 +72,22 @@ class Bar
 	 */
 	public function render(): void
 	{
-		$useSession = $this->useSession && session_status() === PHP_SESSION_ACTIVE;
-		$redirectQueue = &$_SESSION['_tracy']['redirect'];
+		$useSession = $this->useSession && Debugger::getStorage()->isActive();
+		$redirectQueue = Debugger::getStorage()->load('redirect');
 
 		foreach (['bar', 'redirect', 'bluescreen'] as $key) {
-			$queue = &$_SESSION['_tracy'][$key];
+			$queue = Debugger::getStorage()->load($key);
 			$queue = array_slice((array) $queue, -10, null, true);
 			$queue = array_filter($queue, function ($item) {
 				return isset($item['time']) && $item['time'] > time() - 60;
 			});
+			Debugger::getStorage()->save($queue, $key);
 		}
 
 		if (Helpers::isAjax()) {
 			if ($useSession) {
 				$contentId = $_SERVER['HTTP_X_TRACY_AJAX'];
-				$_SESSION['_tracy']['bar'][$contentId] = ['content' => $this->renderHtml('ajax', '-ajax:' . $contentId), 'time' => time()];
+				Debugger::getStorage()->save(['content' => $this->renderHtml('ajax', '-ajax:' . $contentId), 'time' => time()], 'bar', $contentId);
 			}
 
 		} elseif (preg_match('#^Location:#im', implode("\n", headers_list()))) { // redirect
@@ -106,7 +107,7 @@ class Bar
 			$content = '<div id=tracy-debug-bar>' . $content['bar'] . '</div>' . $content['panels'];
 
 			if ($this->contentId) {
-				$_SESSION['_tracy']['bar'][$this->contentId] = ['content' => $content, 'time' => time()];
+				Debugger::getStorage()->save(['content' => $content, 'time' => time()], 'bar', $this->contentId);
 			} else {
 				$contentId = substr(md5(uniqid('', true)), 0, 10);
 				$nonce = Helpers::getNonce();
@@ -114,6 +115,8 @@ class Bar
 				require __DIR__ . '/assets/loader.phtml';
 			}
 		}
+
+		Debugger::getStorage()->save($redirectQueue, 'redirect');
 	}
 
 
@@ -182,14 +185,14 @@ class Bar
 			return true;
 		}
 
-		$this->useSession = session_status() === PHP_SESSION_ACTIVE;
+		$this->useSession = Debugger::getStorage()->isActive();
 
 		if ($this->useSession && Helpers::isAjax()) {
 			header('X-Tracy-Ajax: 1'); // session must be already locked
 		}
 
-		if ($this->useSession && is_string($asset) && preg_match('#^content(-ajax)?\.(\w+)$#', $asset, $m)) {
-			$session = &$_SESSION['_tracy']['bar'][$m[2]];
+		if ($this->useSession && is_string($asset )&& preg_match('#^content(-ajax)?\.(\w+)$#', $asset, $m)) {
+			$session = Debugger::getStorage()->load('bar', $m[2]);
 			header('Content-Type: application/javascript; charset=UTF-8');
 			header('Cache-Control: max-age=60');
 			header_remove('Set-Cookie');
@@ -199,12 +202,12 @@ class Bar
 			if ($session) {
 				$method = $m[1] ? 'loadAjax' : 'init';
 				echo "Tracy.Debug.$method(", json_encode($session['content'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE), ');';
-				$session = null;
+				Debugger::getStorage()->save(null, 'bar', $m[2]);
 			}
-			$session = &$_SESSION['_tracy']['bluescreen'][$m[2]];
+			$session = Debugger::getStorage()->load('bluescreen', $m[2]);
 			if ($session) {
 				echo 'Tracy.BlueScreen.loadAjax(', json_encode($session['content'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE), ');';
-				$session = null;
+				Debugger::getStorage()->save(null, 'bluescreen', $m[2]);
 			}
 			return true;
 		}

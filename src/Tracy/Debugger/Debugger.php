@@ -136,6 +136,9 @@ class Debugger
 	/** @var ILogger */
 	private static $fireLogger;
 
+	/** @var IStorage */
+	private static $storage;
+
 
 	/**
 	 * Static class - cannot be instantiated.
@@ -228,13 +231,8 @@ class Debugger
 				. ($file ? "Output started at $file:$line." : 'Try Tracy\OutputDebugger to find where output started.')
 			);
 
-		} elseif (self::$enabled && session_status() !== PHP_SESSION_ACTIVE) {
-			ini_set('session.use_cookies', '1');
-			ini_set('session.use_only_cookies', '1');
-			ini_set('session.use_trans_sid', '0');
-			ini_set('session.cookie_path', '/');
-			ini_set('session.cookie_httponly', '1');
-			session_start();
+		} elseif (self::$enabled && !self::getStorage()->isActive()) {
+			self::getStorage()->initialize();
 		}
 
 		if (self::getBar()->dispatchAssets()) {
@@ -513,6 +511,27 @@ class Debugger
 			self::$fireLogger = new FireLogger;
 		}
 		return self::$fireLogger;
+	}
+
+
+	/**
+	 * @return void
+	 */
+	public static function setStorage(IStorage $storage)
+	{
+		self::$storage = $storage;
+	}
+
+
+	/**
+	 * @return IStorage
+	 */
+	public static function getStorage()
+	{
+		if (!self::$storage) {
+			self::$storage = new SessionStorage();
+		}
+		return self::$storage;
 	}
 
 

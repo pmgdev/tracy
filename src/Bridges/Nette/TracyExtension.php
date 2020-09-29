@@ -129,9 +129,11 @@ class TracyExtension extends Nette\DI\CompilerExtension
 				));
 			}
 
-			if (!$this->cliMode && ($name = $builder->getByType(Nette\Http\Session::class))) {
-				$initialize->addBody('$this->getService(?)->start();', [$name]);
-				$initialize->addBody('Tracy\Debugger::dispatch();');
+			if (!$this->cliMode) {
+				if ($name = $builder->getByType(Nette\Http\Session::class)) {
+					$initialize->addBody('if (Tracy\Debugger::getStorage() instanceof Tracy\SessionStorage) $this->getService(?)->start(); Tracy\Debugger::dispatch();', [$name]);
+				}
+				$initialize->addBody('if (Tracy\Debugger::getStorage() instanceof Tracy\FileStorage) Tracy\Debugger::dispatch();');
 			}
 		}
 
