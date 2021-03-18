@@ -4,48 +4,24 @@ namespace Tracy;
 
 use Nette\Utils\FileSystem;
 
-class FileStorage implements IStorage
+class FileStorage extends TracySession
 {
-	private const COOKIE_NAME = 'tracy-session';
+	private string $tempDir;
 
-	/** @var string */
-	private $tempDir;
-
-	/** @var string|null */
-	private $storageFilePath;
+	private ?string $storageFilePath = null;
 
 
 	public function __construct(string $tempDir)
 	{
-		FileSystem::createDir($tempDir);
-
 		$this->tempDir = $tempDir;
-
-		if (isset($_COOKIE[self::COOKIE_NAME])) {
-			$sessionId = $_COOKIE[self::COOKIE_NAME];
-		} else {
-			$sessionId = uniqid();
-			setcookie(self::COOKIE_NAME, $sessionId, time() + 7200, '/');
-		}
-
-		$this->storageFilePath = $this->tempDir . DIRECTORY_SEPARATOR . 'tracy-session-' . $sessionId;
-	}
-
-
-	public function initialize(): void
-	{
-	}
-
-
-	public function isActive(): bool
-	{
-		return true;
 	}
 
 
 	public function save(?array $data, string ...$keys): void
 	{
-		$lockFile = $this->storageFilePath . '.lock';
+		$storageFilePath = $this->getStorageFilePath();
+
+		$lockFile = $storageFilePath . '.lock';
 		$lockHandle = $this->lock($lockFile);
 
 		$storageData = $this->loadFromStorage();
@@ -56,7 +32,7 @@ class FileStorage implements IStorage
 		}
 		$target = $data;
 
-		file_put_contents($this->storageFilePath, serialize($storageData));
+		file_put_contents($storageFilePath, serialize($storageData));
 
 		$this->unlock($lockFile, $lockHandle);
 	}
@@ -64,6 +40,10 @@ class FileStorage implements IStorage
 
 	public function load(string ...$keys): array
 	{
+		if (!$this->isActive()) {
+			return [];
+		}
+
 		$storageData = $this->loadFromStorage();
 
 		foreach ($keys as $key) {
@@ -76,8 +56,24 @@ class FileStorage implements IStorage
 
 	private function loadFromStorage(): array
 	{
-		$data = (string) @file_get_contents($this->storageFilePath); // intentionally @
+		$storagePathPath = $this->getStorageFilePath(); // intentionally saved to the variable, we don't want to suppress errors by a @ operator
+		$data = (string) @file_get_contents($storagePathPath); // intentionally @
 		return @unserialize($data) ?: []; // intentionally @
+	}
+
+
+	private function getStorageFilePath(): string
+	{
+		if (!$this->isActive()) {
+			throw new \RuntimeException('FileStorage is not activated.');
+		}
+
+		if ($this->storageFilePath === null) {
+			FileSystem::createDir($this->tempDir);
+			$this->storageFilePath = $this->tempDir . DIRECTORY_SEPARATOR . 'tracy-session-' . self::getSessionId();
+		}
+
+		return $this->storageFilePath;
 	}
 
 

@@ -75,13 +75,15 @@ class Bar
 		$useSession = $this->useSession && Debugger::getStorage()->isActive();
 		$redirectQueue = Debugger::getStorage()->load('redirect');
 
-		foreach (['bar', 'redirect', 'bluescreen'] as $key) {
-			$queue = Debugger::getStorage()->load($key);
-			$queue = array_slice((array) $queue, -10, null, true);
-			$queue = array_filter($queue, function ($item) {
-				return isset($item['time']) && $item['time'] > time() - 60;
-			});
-			Debugger::getStorage()->save($queue, $key);
+		if ($useSession) {
+			foreach (['bar', 'redirect', 'bluescreen'] as $key) {
+				$queue = Debugger::getStorage()->load($key);
+				$queue = array_slice((array) $queue, -10, null, true);
+				$queue = array_filter($queue, function ($item) {
+					return isset($item['time']) && $item['time'] > time() - 60;
+				});
+				Debugger::getStorage()->save($queue, $key);
+			}
 		}
 
 		if (Helpers::isAjax()) {
@@ -116,7 +118,9 @@ class Bar
 			}
 		}
 
-		Debugger::getStorage()->save($redirectQueue, 'redirect');
+		if ($redirectQueue !== []) {
+			Debugger::getStorage()->save($redirectQueue, 'redirect');
+		}
 	}
 
 
